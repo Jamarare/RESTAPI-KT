@@ -4,85 +4,58 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ITB2203Application.Controllers;
 
-[ApiController]
 [Route("api/[controller]")]
+[ApiController]
 public class TicketsController : ControllerBase
 {
-    private readonly DataContext _context;
-
-    public TicketsController(DataContext context)
-    {
-        _context = context;
-    }
+    private static List<Ticket> Tickets = new List<Ticket>();
+    private static int ticketIdCounter = 1;
 
     [HttpGet]
-    public ActionResult<IEnumerable<Ticket>> GetTickets(string? nam = null)
-    {
-        var query = _context.Tickets!.AsQueryable();
-
-        if (nam != null)
-            query = query.Where(x => x.SeatNo != null && x.SeatNo.ToUpper().Contains(nam.ToUpper()));
-
-        return query.ToList();
-    }
+    public IActionResult GetTickets() => Ok(Tickets);
 
     [HttpGet("{id}")]
-    public ActionResult<TextReader> GetTicket(int id)
+    public IActionResult GetTicket(int id)
     {
-        var ticket = _context.Tickets!.Find(id);
-
-        if (ticket == null)
-        {
-            return NotFound();
-        }
-
-        return Ok(ticket);
-    }
-
-    [HttpPut("{id}")]
-    public IActionResult PutTicket(int id, Ticket Ti)
-    {
-        var dbTicket = _context.Tickets!.AsNoTracking().FirstOrDefault(x => x.Id == Ti.Id);
-        if (id != Ti.Id || dbTicket == null)
-        {
-            return NotFound();
-        }
-
-        _context.Update(Ti);
-        _context.SaveChanges();
-
-        return NoContent();
+        var ticket = Tickets.FirstOrDefault(t => t.Id == id);
+        return ticket != null ? Ok(ticket) : NotFound();
     }
 
     [HttpPost]
-    public ActionResult<Ticket> PostTicket(Ticket Ti)
+    public IActionResult CreateTicket([FromBody] Ticket ticket)
     {
-        var dbExercise = _context.Tickets!.Find(Ti.Id);
-        if (dbExercise == null)
-        {
-            _context.Add(Ti);
-            _context.SaveChanges();
+        if (ticket.Price <= 0)
+            return BadRequest("Ticket price must be a positive number.");
 
-            return CreatedAtAction(nameof(GetTicket), new { Id = Ti.Id }, Ti);
-        }
-        else
-        {
-            return Conflict();
-        }
+        if (Tickets.Any(t => t.SessionId == ticket.SessionId && t.SeatNo == ticket.SeatNo))
+            return BadRequest("Seat number must be unique within a session.");
+
+        ticket.Id = ticketIdCounter++;
+        Tickets.Add(ticket);
+        return CreatedAtAction(nameof(GetTicket), new { id = ticket.Id }, ticket);
+    }
+
+    [HttpPut("{id}")]
+    public IActionResult UpdateTicket(int id, [FromBody] Ticket updatedTicket)
+    {
+        var ticket = Tickets.FirstOrDefault(t => t.Id == id);
+        if (ticket == null) return NotFound();
+
+        if (updatedTicket.Price <= 0)
+            return BadRequest("Ticket price must be a positive number.");
+
+        ticket.SeatNo = updatedTicket.SeatNo;
+        ticket.Price = updatedTicket.Price;
+        return NoContent();
     }
 
     [HttpDelete("{id}")]
     public IActionResult DeleteTicket(int id)
     {
-        var ticket = _context.Tickets!.Find(id);
-        if (ticket == null)
-        {
-            return NotFound();
-        }
+        var ticket = Tickets.FirstOrDefault(t => t.Id == id);
+        if (ticket == null) return NotFound();
 
-        _context.Remove(ticket);
-        _context.SaveChanges();
-
+        Tickets.Remove(ticket);
         return NoContent();
     }
 }

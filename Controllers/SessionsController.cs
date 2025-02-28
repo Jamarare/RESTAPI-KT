@@ -4,85 +4,67 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ITB2203Application.Controllers;
 
-[ApiController]
 [Route("api/[controller]")]
+[ApiController]
 public class SessionsController : ControllerBase
 {
-    private readonly DataContext _context;
-
-    public SessionsController(DataContext context)
-    {
-        _context = context;
-    }
+    private static List<Session> Sessions = new List<Session>();
+    private static int sessionIdCounter = 1;
 
     [HttpGet]
-    public ActionResult<IEnumerable<Session>> GetSessions(string? nam = null)
+    public IActionResult GetSessions([FromQuery] DateTime? periodStart, [FromQuery] DateTime? periodEnd)
     {
-        var query = _context.Sessions!.AsQueryable();
+        var filteredSessions = Sessions.AsQueryable();
 
-        if (nam != null)
-            query = query.Where(x => x.AuditoriumName != null && x.AuditoriumName.ToUpper().Contains(nam.ToUpper()));
+        if (periodStart.HasValue)
+            filteredSessions = filteredSessions.Where(s => s.StartTime >= periodStart.Value);
 
-        return query.ToList();
+        if (periodEnd.HasValue)
+            filteredSessions = filteredSessions.Where(s => s.StartTime <= periodEnd.Value);
+
+        return Ok(filteredSessions);
     }
 
     [HttpGet("{id}")]
-    public ActionResult<TextReader> GetSession(int id)
+    public IActionResult GetSession(int id)
     {
-        var session = _context.Sessions!.Find(id);
-
-        if (session == null)
-        {
-            return NotFound();
-        }
-
-        return Ok(session);
-    }
-
-    [HttpPut("{id}")]
-    public IActionResult PutSession(int id, Session ses)
-    {
-        var dbSession = _context.Sessions!.AsNoTracking().FirstOrDefault(x => x.Id == ses.Id);
-        if (id != ses.Id || dbSession == null)
-        {
-            return NotFound();
-        }
-
-        _context.Update(ses);
-        _context.SaveChanges();
-
-        return NoContent();
+        var session = Sessions.FirstOrDefault(s => s.Id == id);
+        return session != null ? Ok(session) : NotFound();
     }
 
     [HttpPost]
-    public ActionResult<Session> PostSession(Session ses)
+    public IActionResult CreateSession([FromBody] Session session)
     {
-        var dbExercise = _context.Sessions!.Find(ses.Id);
-        if (dbExercise == null)
-        {
-            _context.Add(ses);
-            _context.SaveChanges();
+        if (session.StartTime <= DateTime.UtcNow)
+            return BadRequest("Session start time must be in the future.");
 
-            return CreatedAtAction(nameof(GetSession), new { Id = ses.Id }, ses);
-        }
-        else
-        {
-            return Conflict();
-        }
+        session.Id = sessionIdCounter++;
+        Sessions.Add(session);
+        return CreatedAtAction(nameof(GetSession), new { id = session.Id }, session);
+    }
+
+    [HttpPut("{id}")]
+    public IActionResult UpdateSession(int id, [FromBody] Session updatedSession)
+    {
+        var session = Sessions.FirstOrDefault(s => s.Id == id);
+        if (session == null) return NotFound();
+
+        if (updatedSession.StartTime <= DateTime.UtcNow)
+            return BadRequest("Session start time must be in the future.");
+
+        session.MovieId = updatedSession.MovieId;
+        session.AuditoriumName = updatedSession.AuditoriumName;
+        session.StartTime = updatedSession.StartTime;
+        return NoContent();
     }
 
     [HttpDelete("{id}")]
     public IActionResult DeleteSession(int id)
     {
-        var session = _context.Sessions!.Find(id);
-        if (session == null)
-        {
-            return NotFound();
-        }
+        var session = Sessions.FirstOrDefault(s => s.Id == id);
+        if (session == null) return NotFound();
 
-        _context.Remove(session);
-        _context.SaveChanges();
-
-        return NoContent();
+        Sessions.Remove(session);
+        return Ok();
     }
 }
