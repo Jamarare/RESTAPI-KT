@@ -1,6 +1,7 @@
 ﻿using ITB2203Application.Model;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ITB2203Application.Controllers;
 
@@ -8,17 +9,30 @@ namespace ITB2203Application.Controllers;
 [ApiController]
 public class TicketsController : ControllerBase
 {
+    private readonly DataContext _context;
+
     private static List<Ticket> Tickets = new List<Ticket>();
     private static int ticketIdCounter = 1;
+
+    public TicketsController(DataContext context)
+    {
+        _context = context;
+    }
 
     [HttpGet]
     public IActionResult GetTickets() => Ok(Tickets);
 
     [HttpGet("{id}")]
-    public IActionResult GetTicket(int id)
+    public ActionResult<Ticket> GetTicket(int id)
     {
-        var ticket = Tickets.FirstOrDefault(t => t.Id == id);
-        return ticket != null ? Ok(ticket) : NotFound();
+        var Tic = _context.Tickets!.Find(id);
+
+        if (Tic == null)
+        {
+            return NotFound();
+        }
+
+        return Ok(Tic);
     }
 
     [HttpPost]
@@ -32,7 +46,7 @@ public class TicketsController : ControllerBase
 
         ticket.Id = ticketIdCounter++;
         Tickets.Add(ticket);
-        return CreatedAtAction(nameof(GetTicket), new { id = ticket.Id }, ticket);
+        return CreatedAtAction(nameof(GetTickets), new { id = ticket.Id }, ticket);
     }
 
     [HttpPut("{id}")]
