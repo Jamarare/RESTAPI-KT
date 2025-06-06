@@ -10,81 +10,78 @@ public class SessionsController : ControllerBase
 {
     private readonly DataContext _context;
 
-    private static List<Session> Sessions = new List<Session>();
-    private static int sessionIdCounter = 1;
-
     public SessionsController(DataContext context)
     {
         _context = context;
     }
 
     [HttpGet]
-    public IActionResult GetSessions([FromQuery] DateTime? periodStart, [FromQuery] DateTime? periodEnd)
+    public async Task<IActionResult> GetSessions([FromQuery] DateTime? periodStart, [FromQuery] DateTime? periodEnd)
     {
-        var filteredSessions = Sessions.AsQueryable();
+        var query = _context.Sessions!.AsQueryable();
 
         if (periodStart.HasValue)
-            filteredSessions = filteredSessions.Where(s => s.StartTime >= periodStart.Value);
+            query = query.Where(s => s.StartTime >= periodStart.Value);
 
         if (periodEnd.HasValue)
-            filteredSessions = filteredSessions.Where(s => s.StartTime <= periodEnd.Value);
+            query = query.Where(s => s.StartTime <= periodEnd.Value);
 
-        return Ok(filteredSessions);
+        var sessions = await query.ToListAsync();
+        return Ok(sessions);
     }
 
     [HttpGet("{id}")]
-    public ActionResult<Session> GetSession(int id)
+    public async Task<ActionResult<Session>> GetSession(int id)
     {
-        var session = _context.Sessions!.Find(id);
+        var session = await _context.Sessions!.FindAsync(id);
 
         if (session == null)
-        {
             return NotFound();
-        }
 
         return Ok(session);
     }
 
-    [HttpPut("{id}")]
-    public IActionResult UpdateSession(int id, [FromBody] Session updatedSession)
-    {
-        var session = Sessions.FirstOrDefault(s => s.Id == id);
-        if (session == null) return NotFound();
-
-        if (updatedSession.StartTime <= DateTime.UtcNow)
-            return BadRequest("Session start time must be in the future.");
-
-        session.MovieId = updatedSession.MovieId;
-        session.AuditoriumName = updatedSession.AuditoriumName;
-        session.StartTime = updatedSession.StartTime;
-        return NoContent();
-    }
-
     [HttpPost]
-    public IActionResult CreateSession([FromBody] Session session)
+    public async Task<IActionResult> CreateSession([FromBody] Session session)
     {
         if (session.StartTime <= DateTime.UtcNow)
             return BadRequest("Session start time must be in the future.");
 
-        session.Id = sessionIdCounter++;
-        Sessions.Add(session);
-        return CreatedAtAction(nameof(GetSessions), new { id = session.Id }, session);
+        _context.Sessions!.Add(session);
+        await _context.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetSession), new { id = session.Id }, session);
     }
 
-
-
-    [HttpDelete("{id}")]
-    public IActionResult DeleteSession(int id)
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateSession(int id, [FromBody] Session updatedSession)
     {
-        var session = _context.Sessions!.Find(id);
-        if (session == null)
-        {
-            return NotFound();
-        }
+        if (updatedSession.StartTime <= DateTime.UtcNow)
+            return BadRequest("Session start time must be in the future.");
 
-        _context.Remove(session);
-        _context.SaveChanges();
+        var session = await _context.Sessions!.FindAsync(id);
+        if (session == null)
+            return NotFound();
+
+        session.MovieId = updatedSession.MovieId;
+        session.AuditoriumName = updatedSession.AuditoriumName;
+        session.StartTime = updatedSession.StartTime;
+
+        await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteSession(int id)
+    {
+        var session = await _context.Sessions!.FindAsync(id);
+        if (session == null)
+            return NotFound();
+
+        _context.Sessions.Remove(session);
+        await _context.SaveChangesAsync();
+
+        return Ok();
     }
 }
