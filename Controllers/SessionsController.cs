@@ -16,14 +16,9 @@ public class SessionsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetSessions(
-        [FromQuery] DateTime? periodStart,
-        [FromQuery] DateTime? periodEnd,
-        [FromQuery] string? movieTitle)
+    public async Task<IActionResult> GetSessions([FromQuery] DateTime? periodStart, [FromQuery] DateTime? periodEnd)
     {
-        var query = _context.Sessions
-            .Include(s => s.Movie)
-            .AsQueryable();
+        var query = _context.Sessions!.AsQueryable();
 
         if (periodStart.HasValue)
             query = query.Where(s => s.StartTime >= periodStart.Value);
@@ -31,19 +26,14 @@ public class SessionsController : ControllerBase
         if (periodEnd.HasValue)
             query = query.Where(s => s.StartTime <= periodEnd.Value);
 
-        if (!string.IsNullOrEmpty(movieTitle))
-            query = query.Where(s => s.Movie.Title.ToLower().Contains(movieTitle.ToLower()));
-
-        var result = await query.ToListAsync();
-        return Ok(result);
+        var sessions = await query.ToListAsync();
+        return Ok(sessions);
     }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<Session>> GetSession(int id)
     {
-        var session = await _context.Sessions
-            .Include(s => s.Movie)
-            .FirstOrDefaultAsync(s => s.Id == id);
+        var session = await _context.Sessions!.FindAsync(id);
 
         if (session == null)
             return NotFound();
@@ -51,45 +41,32 @@ public class SessionsController : ControllerBase
         return Ok(session);
     }
 
-    [HttpGet("{id}/tickets")]
-    public async Task<IActionResult> GetSessionTickets(int id)
-    {
-        var sessionExists = await _context.Sessions.AnyAsync(s => s.Id == id);
-        if (!sessionExists)
-            return NotFound();
-
-        var tickets = await _context.Tickets
-            .Where(t => t.SessionId == id)
-            .ToListAsync();
-
-        return Ok(tickets);
-    }
-
     [HttpPost]
-    public async Task<IActionResult> CreateSession([FromBody] Session session)
+    public IActionResult CreateSession([FromBody] Session session)
     {
         if (session.StartTime <= DateTime.UtcNow)
             return BadRequest("Session start time must be in the future.");
 
-        var movieExists = await _context.Movies.AnyAsync(m => m.Id == session.MovieId);
+        var movieExists = _context.Movies.Any(m => m.Id == session.MovieId);
         if (!movieExists)
-            return BadRequest("Movie does not exist.");
+            return BadRequest("Movie with given ID does not exist.");
 
         _context.Sessions.Add(session);
-        await _context.SaveChangesAsync();
+        _context.SaveChanges();
 
         return CreatedAtAction(nameof(GetSession), new { id = session.Id }, session);
     }
 
+
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateSession(int id, [FromBody] Session updatedSession)
     {
-        var session = await _context.Sessions.FindAsync(id);
-        if (session == null)
-            return NotFound();
-
         if (updatedSession.StartTime <= DateTime.UtcNow)
             return BadRequest("Session start time must be in the future.");
+
+        var session = await _context.Sessions!.FindAsync(id);
+        if (session == null)
+            return NotFound();
 
         session.MovieId = updatedSession.MovieId;
         session.AuditoriumName = updatedSession.AuditoriumName;
@@ -103,13 +80,13 @@ public class SessionsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteSession(int id)
     {
-        var session = await _context.Sessions.FindAsync(id);
+        var session = await _context.Sessions!.FindAsync(id);
         if (session == null)
             return NotFound();
 
         _context.Sessions.Remove(session);
         await _context.SaveChangesAsync();
 
-        return NoContent();
+        return Ok();
     }
 }
